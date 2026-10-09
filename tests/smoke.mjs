@@ -70,6 +70,9 @@ for (const [label, device] of [['iphone', devices['iPhone 13']], ['pixel', devic
   const legatoVoices = await page.evaluate(async () => {
     const a = window.__lowchord;
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    // Let release tails from earlier steps die out first
+    for (let i = 0; i < 40 && a.engine.meter.voices > 0; i++) await wait(50);
+    a.perf.tail = null;
     a.perf.padDown(0); await wait(150);
     a.perf.padDown(3); a.perf.padUp(0); await wait(150);
     a.perf.padDown(5); a.perf.padUp(3); await wait(150);
