@@ -276,6 +276,41 @@ export function voiceChord(chord, st, prev) {
   return notes;
 }
 
+/**
+ * Legato voice assignment between two chords. Both lists are sorted; returns, for each
+ * index of `next`, the index in `prev` whose voice should glide to it (or -1 for a new voice).
+ * Order-preserving minimum-movement matching, so voices never cross.
+ */
+export function pairVoices(next, prev) {
+  const out = next.map(() => -1);
+  if (!prev || !prev.length || !next.length) return out;
+  const swap = next.length > prev.length;
+  const A = swap ? prev : next; // shorter list: every element gets a partner
+  const B = swap ? next : prev;
+  const n = A.length;
+  const m = B.length;
+  const f = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(Infinity));
+  for (let j = 0; j <= m; j++) f[0][j] = 0;
+  for (let i = 1; i <= n; i++) {
+    for (let j = i; j <= m; j++) {
+      f[i][j] = Math.min(f[i][j - 1], f[i - 1][j - 1] + Math.abs(A[i - 1] - B[j - 1]));
+    }
+  }
+  // Backtrack
+  let i = n;
+  let j = m;
+  while (i > 0) {
+    if (j > i && f[i][j] === f[i][j - 1]) j--;
+    else {
+      if (swap) out[j - 1] = i - 1;
+      else out[i - 1] = j - 1;
+      i--;
+      j--;
+    }
+  }
+  return out;
+}
+
 /** Pair each new note with the nearest previous note (for chord-to-chord glide). */
 export function glideSources(next, prev) {
   if (!prev || !prev.length) return next.map(() => null);

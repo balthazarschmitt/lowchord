@@ -14,11 +14,11 @@ import { Display } from './ui/display.js';
 import { buildPanel } from './ui/menus.js';
 import * as store from './store.js';
 
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
 
 const DEFAULTS = {
   key: 0, scale: 0, octave: 0, joyMode: 'default', voicing: 'lead', inversion: 0, bass: 'off',
-  mode: 'play', bpm: 100, swing: 0, latch: false,
+  mode: 'play', bpm: 100, swing: 0, latch: false, chordGlide: 0.12, restrike: true,
   arpPattern: 'up', arpRate: '1/16', arpOct: 1, arpGate: 0.7, arpLatch: false,
   repeatRate: '1/8', strumSpeed: 0.03, seqRate: '1/4',
   beatOn: false, beatPattern: 0, drumKit: 0, drumVol: 0.8,
@@ -230,6 +230,9 @@ const PANELS = {
       options: () => [...PRESETS.map((p, i) => [i, p.name]), ...S.userPresets.map((p, i) => [100 + i, '★ ' + p.name])],
     },
     { type: 'button', label: 'Save as user preset', action: saveUserPreset },
+    { type: 'range', key: 'chordGlide', label: 'Chord glide', min: 0, max: 0.6, fmt: (v) => (v < 0.005 ? 'Off' : sec(v)) },
+    { type: 'toggle', key: 'restrike', label: 'Re-strike', when: () => S.chordGlide > 0.005 },
+    { type: 'note', label: 'Voices slide into the next chord. Re-strike on: each change is articulated (best for bells, plucks, keys). Off: pure legato (best for pads and leads).' },
     { type: 'select', key: 'sound.wave', label: 'Wave', options: WAVES.map((w, i) => [i, w]) },
     { type: 'range', key: 'sound.detune', label: 'Detune / FM', min: 0, max: 1, fmt: pct },
     { type: 'range', key: 'sound.sub', label: 'Sub osc', min: 0, max: 1, fmt: pct },

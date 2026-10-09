@@ -1,7 +1,7 @@
 // Play modes: turns pad/joystick input into notes. Also owns the beat player,
 // the chord sequencer, Chord Hero and the Ear Trainer.
 
-import { buildChord, voiceChord, glideSources, scaleNote, closeVoicing, PROGRESSIONS, mod12 } from './theory.js';
+import { buildChord, voiceChord, glideSources, pairVoices, scaleNote, closeVoicing, PROGRESSIONS, mod12 } from './theory.js';
 import { TICKS, PPQ } from './clock.js';
 import { PATTERNS, DRUMS } from './drums.js';
 
@@ -33,6 +33,7 @@ export class Performer {
     this.active = null; // { deg, dir, chord, notes }
     this.last = null; // last chord shown/played (for the strum strip)
     this.handles = [];
+    this.tail = null; // last released chord, still ringing: { handles, t }
     this.prevVoicing = null;
     this.leadHandles = new Map();
     this.arp = null;
@@ -165,6 +166,8 @@ export class Performer {
     } else if (m === 'repeat') {
       this.stopHandles();
       this.repeatStart(notes);
+    } else if (m !== 'strum' && S.chordGlide > 0) {
+      this.legatoTo(notes);
     } else {
       this.stopHandles();
       const now = this.engine.now;
@@ -179,8 +182,32 @@ export class Performer {
   }
 
   stopHandles() {
+    if (this.handles.length) this.tail = { handles: this.handles, t: this.engine.now };
     for (const h of this.handles) this.out.noteOff(h);
     this.handles = [];
+  }
+
+  /**
+   * Move the sounding chord to `notes` by sliding each voice to its nearest new note
+   * (no retrigger), like the HiChord. Works from a held chord or one still ringing out.
+   */
+  legatoTo(notes) {
+    const S = this.S;
+    let prev = this.handles;
+    if (!prev.length && this.tail && this.engine.now - this.tail.t < S.sound.release + 0.05) prev = this.tail.handles;
+    prev = prev.slice().sort((a, b) => a.note - b.note);
+    const pairs = pairVoices(notes, prev.map((h) => h.note));
+    const used = new Set();
+    const vel = 0.8;
+    const next = notes.map((n, i) => {
+      const j = pairs[i];
+      if (j < 0) return this.out.noteOn(n, vel);
+      used.add(j);
+      return this.out.legato(prev[j], n, vel, S.chordGlide, S.restrike);
+    });
+    prev.forEach((h, j) => { if (!used.has(j)) this.out.noteOff(h); });
+    this.handles = next;
+    this.tail = null;
   }
 
   releaseChord(silent) {

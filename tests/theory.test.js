@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   SCALES, DIRS, JOY_MODES, buildChord, voiceChord, voiceLead, closeVoicing, movementCost,
-  chordSuffix, mod12, glideSources, scaleNote,
+  chordSuffix, mod12, glideSources, scaleNote, pairVoices,
 } from '../src/theory.js';
 
 const st = (o = {}) => ({ key: 0, scale: 0, joyMode: 'default', octave: 0, voicing: 'close', inversion: 0, bass: 'off', ...o });
@@ -124,4 +124,22 @@ test('glide sources pair nearest previous notes', () => {
 test('lead mode scale notes', () => {
   assert.equal(scaleNote(st({ key: 2 }), 0), 62);
   assert.equal(scaleNote(st({ key: 0, octave: 1 }), 6), 83);
+});
+
+test('legato voice pairing', () => {
+  // Same size: straight pairing
+  assert.deepEqual(pairVoices([60, 65, 69], [60, 64, 67]), [0, 1, 2]);
+  // C -> Cmaj7 (one extra voice): the new B is the unpaired one
+  assert.deepEqual(pairVoices([60, 64, 67, 71], [60, 64, 67]), [0, 1, 2, -1]);
+  // Cmaj7 -> F: the old voice farthest from F's notes is dropped, no crossing
+  const p = pairVoices([60, 65, 69], [60, 64, 67, 71]);
+  assert.deepEqual(p, [0, 1, 2]);
+  const q = pairVoices([65, 69, 72], [60, 64, 67, 71]);
+  assert.deepEqual(q, [1, 2, 3]);
+  // With bass note: bass pairs with bass
+  assert.deepEqual(pairVoices([41, 60, 65, 69], [36, 60, 64, 67]), [0, 1, 2, 3]);
+  assert.deepEqual(pairVoices([60], []), [-1]);
+  // Each previous voice is used at most once
+  const r = pairVoices([50, 51, 52, 53, 54], [52]);
+  assert.equal(r.filter((x) => x === 0).length, 1);
 });

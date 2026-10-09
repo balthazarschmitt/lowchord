@@ -66,6 +66,19 @@ for (const [label, device] of [['iphone', devices['iPhone 13']], ['pixel', devic
 
   await page.screenshot({ path: join(outDir, `${label}-play.png`) });
 
+  // Chord change with glide reuses the sounding voices (C → F → Am stays at 3 voices)
+  const legatoVoices = await page.evaluate(async () => {
+    const a = window.__lowchord;
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    a.perf.padDown(0); await wait(150);
+    a.perf.padDown(3); a.perf.padUp(0); await wait(150);
+    a.perf.padDown(5); a.perf.padUp(3); await wait(150);
+    const v = a.engine.meter.voices;
+    a.perf.padUp(5);
+    return v;
+  });
+  check(legatoVoices === 3, `${label}: chord changes glide on the same 3 voices (got ${legatoVoices})`);
+
   // Every panel opens without errors
   for (const p of ['key', 'sound', 'fx', 'mode', 'beat', 'loop', 'mic', 'midi', 'settings']) {
     await page.click(`[data-panel="${p}"]`);
@@ -175,6 +188,34 @@ for (const [label, device] of [['iphone', devices['iPhone 13']], ['pixel', devic
   console.log(`DSP: 10 s rendered in ${r.ms.toFixed(0)} ms → ${(load * 100).toFixed(1)}% of real time on this machine; peak ${r.peak.toFixed(3)}`);
   check(!r.nan && r.peak > 0.05 && r.peak <= 1, 'worst-case patch renders clean audio (no NaN, no clipping)');
   check(load < 0.25, 'worst-case patch uses < 25% of real time on desktop CPU');
+}
+
+// Glide: one sine voice slides C4 → C5 over 0.2 s via a legato message; measure pitch over time.
+{
+  const page = await (await browser.newContext()).newPage();
+  await page.goto(url);
+  const f = await page.evaluate(async () => {
+    const sr = 48000;
+    const ctx = new OfflineAudioContext(1, sr * 1.2, sr);
+    await ctx.audioWorklet.addModule('src/worklet/synth.js');
+    const node = new AudioWorkletNode(ctx, 'lowchord', { outputChannelCount: [2] });
+    node.connect(ctx.destination);
+    node.port.postMessage({ t: 'ps', p: { wave: 0, revMix: 0, delayMix: 0, chorus: 0, cutoff: 18000, attack: 0.001, sustain: 1 } });
+    node.port.postMessage({ t: 'on', id: 1, n: 60, v: 1, w: 0, g: -1 });
+    node.port.postMessage({ t: 'leg', from: 1, id: 2, n: 72, v: 1, gt: 0.2, rt: 0, w: 0.4 });
+    await new Promise((r) => setTimeout(r, 50));
+    const d = (await ctx.startRendering()).getChannelData(0);
+    // Frequency from zero crossings in 40 ms windows
+    const freqAt = (t) => {
+      const a = Math.round(t * sr), n = Math.round(0.04 * sr);
+      let z = 0;
+      for (let i = a + 1; i < a + n; i++) if (d[i - 1] <= 0 && d[i] > 0) z++;
+      return z / 0.04;
+    };
+    return { before: freqAt(0.3), mid: freqAt(0.44), after: freqAt(0.9) };
+  });
+  console.log(`glide: ${f.before} Hz → ${f.mid} Hz (mid-slide) → ${f.after} Hz`);
+  check(Math.abs(f.before - 262) < 30 && Math.abs(f.after - 523) < 30 && f.mid > 300 && f.mid < 500, 'legato voice glides smoothly between pitches');
 }
 
 await browser.close();

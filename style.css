@@ -190,21 +190,54 @@ button {
 .pad.util.sel { border-color: var(--accent); }
 .pad.util.sel b { color: var(--accent); }
 
-/* ---------- Landscape ---------- */
+/* ---------- Landscape ----------
+   Phone held sideways: joystick under the left thumb, pads under the right thumb,
+   menus in a slim rail on the far right so the display and pads get the full height. */
 
 @media (orientation: landscape) {
   #app {
-    padding: calc(8px + var(--safe-t)) calc(10px + env(safe-area-inset-right, 0px)) calc(8px + var(--safe-b)) calc(10px + env(safe-area-inset-left, 0px));
-    grid-template-columns: minmax(150px, 24%) 1fr;
-    grid-template-rows: minmax(90px, 34%) auto 40px 1fr;
+    --rail: 58px;
+    padding: calc(6px + var(--safe-t)) calc(8px + env(safe-area-inset-right, 0px)) calc(6px + var(--safe-b)) calc(8px + env(safe-area-inset-left, 0px));
+    gap: 6px;
+    grid-template-columns: minmax(140px, 25%) 1fr var(--rail);
+    grid-template-rows: minmax(70px, 1fr) 34px minmax(0, 1.55fr);
     grid-template-areas:
-      "display display"
-      "bar bar"
-      "left strip"
-      "left pads";
+      "left display bar"
+      "left strip bar"
+      "left pads bar";
   }
-  #pads { grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(2, 1fr); }
-  #joy { width: min(100%, 30vh + 40px); }
+
+  #bar {
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: auto;
+    touch-action: pan-y;
+    gap: 4px;
+  }
+  #bar button {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 28px;
+    padding: 0 2px;
+    font-size: 10px;
+    letter-spacing: 0.02em;
+  }
+
+  #left { justify-content: space-evenly; gap: 6px; }
+  #joy { width: min(100%, 58vh); }
+  #transport button { width: 46px; height: 34px; }
+
+  #pads { grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(2, 1fr); gap: 6px; }
+  .pad b { font-size: clamp(15px, 6vh, 26px); }
+  .pad small { font-size: clamp(10px, 3.2vh, 13px); }
+
+}
+
+/* Very short landscape screens (small phones): hide the strip label, tighten further */
+@media (orientation: landscape) and (max-height: 380px) {
+  #app { grid-template-rows: minmax(64px, 0.9fr) 30px minmax(0, 1.6fr); }
+  #strip span { display: none; }
+  #transport button { height: 30px; }
 }
 
 /* ---------- Sheet (settings panels) ---------- */
@@ -246,9 +279,6 @@ body.sheet-open #sheet { transform: none; }
   touch-action: pan-y;
 }
 
-@media (orientation: landscape) {
-  #sheet { left: auto; top: 0; width: min(420px, 60vw); max-height: none; border-radius: 18px 0 0 18px; transform: translateX(105%); border-left: 1px solid var(--line); }
-}
 
 .ph { width: 100%; margin: 10px 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
 .pnote { width: 100%; margin: 0; font-size: 12.5px; color: var(--muted); }
@@ -333,3 +363,21 @@ body.ready #splash { display: none; }
 }
 #splash-err { color: var(--hot) !important; min-height: 1em; }
 #splash .hint { font-size: 12.5px; max-width: 320px; margin-top: 18px; }
+
+/* Landscape sheet (after the base sheet rules so it wins) */
+@media (orientation: landscape) {
+  /* Settings slide in from the right, leaving the menu rail visible */
+  #sheet {
+    left: auto;
+    top: 0;
+    right: calc(var(--rail) + 14px + env(safe-area-inset-right, 0px));
+    width: min(400px, 56vw);
+    max-height: none;
+    border-radius: 0 0 0 18px;
+    transform: translateX(calc(100% + var(--rail) + 30px));
+    border-left: 1px solid var(--line);
+    padding-bottom: 0;
+  }
+  #sheet header { padding: calc(8px + var(--safe-t)) 14px 4px; }
+  .prow { min-height: 34px; }
+}

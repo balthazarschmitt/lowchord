@@ -19,6 +19,21 @@ export class Out {
     return h;
   }
 
+  /**
+   * Slide an existing note's voice to a new pitch. The old handle is retired without a
+   * note-off to the synth; MIDI and the looper see a normal off/on pair.
+   */
+  legato(old, note, vel, glideTime, restrike = true) {
+    const id = this.engine.legato(old.id, note, vel, glideTime, restrike, old.src);
+    const h = { id, note, vel, src: old.src, ch: old.ch, rec: null, offAt: Infinity };
+    old.off = true;
+    this.midi.noteOff(old.note, 0, old.ch);
+    this.midi.noteOn(note, vel, 0, h.ch);
+    if (old.rec) old.rec.looper.recNoteOff(old, this.engine.now);
+    if (h.src === 'live' && this.recorder) this.recorder.recNoteOn(h, this.engine.now);
+    return h;
+  }
+
   noteOff(h, when = 0) {
     if (!h || h.off) return;
     h.off = true;

@@ -78,6 +78,13 @@ export class Engine {
     return id;
   }
 
+  /** Glide the voice playing `fromId` to a new note (no retrigger). Returns the new id. */
+  legato(fromId, note, vel, glideTime, restrike = true, src = 'live') {
+    const id = this.nextId++;
+    this.post({ t: 'leg', from: fromId, id, n: note, v: vel, gt: glideTime, rt: restrike ? 1 : 0, w: 0, src });
+    return id;
+  }
+
   noteOff(id, when = 0, src = 'live') {
     this.post({ t: 'off', id, w: when, src });
   }

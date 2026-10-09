@@ -55,7 +55,9 @@ class Voice {
     this.id = -1;
     this.note = 60;
     this.freq = 261.6;
-    this.target = 261.6;
+    this.pitch = 60; // current pitch in semitones (MIDI), glides toward tpitch
+    this.tpitch = 60;
+    this.cG = 1; // glide coefficient for this voice
     this.vel = 1;
     this.age = 0;
     this.stage = 0; // 0 off, 1 attack, 2 decay/sustain, 3 release
@@ -247,7 +249,7 @@ class LowChordProcessor extends AudioWorkletProcessor {
       case 'ps':
         for (const k in m.p) { this.P[k] = m.p[k]; this.paramChanged(k); }
         break;
-      case 'on': case 'off': case 'drum':
+      case 'on': case 'off': case 'drum': case 'leg':
         if (m.w && m.w > currentTime) {
           if (this.qn < QUEUE) this.queue[this.qn++] = m;
         } else this.exec(m, 0);
@@ -307,6 +309,7 @@ class LowChordProcessor extends AudioWorkletProcessor {
 
   exec(m, offset) {
     if (m.t === 'on') this.noteOn(m, offset);
+    else if (m.t === 'leg') this.legato(m, offset);
     else if (m.t === 'off') this.noteOff(m.id, offset);
     else if (m.t === 'drum') this.drumOn(m.d, m.v, offset);
   }
@@ -330,8 +333,10 @@ class LowChordProcessor extends AudioWorkletProcessor {
     v.note = m.n;
     v.vel = m.v;
     v.age = ++this.ageCounter;
-    v.target = 440 * Math.pow(2, (m.n - 69) / 12);
-    v.freq = m.g >= 0 && P.glide > 0 ? 440 * Math.pow(2, (m.g - 69) / 12) : v.target;
+    v.tpitch = m.n;
+    v.pitch = m.g >= 0 && P.glide > 0 ? m.g : m.n;
+    v.cG = this.cGlide;
+    v.freq = 440 * Math.pow(2, (v.pitch - 69) / 12);
     v.stage = 1;
     if (!wasActive) v.env = 0;
     v.fenv = 0;
@@ -344,18 +349,46 @@ class LowChordProcessor extends AudioWorkletProcessor {
     const pan = Math.max(-0.8, Math.min(0.8, (m.n - 64) / 30));
     v.gl = Math.cos((pan + 1) * Math.PI * 0.25);
     v.gr = Math.sin((pan + 1) * Math.PI * 0.25);
-    if (P.wave === 7) {
-      // Karplus-Strong excitation
-      const len = Math.max(2, Math.min(KS_LEN - 1, Math.round(this.sr / v.target)));
-      v.ksLen = len;
-      v.ksIdx = 0;
-      let lp = 0;
-      const bright = 0.3 + 0.7 * Math.min(1, P.cutoff / 8000);
-      for (let i = 0; i < len; i++) {
-        lp += (this.rand() - lp) * bright;
-        v.ks[i] = lp;
-      }
-      v.ksLast = 0;
+    if (P.wave === 7) this.excite(v);
+  }
+
+  /** Karplus-Strong excitation: fill the string's delay line with filtered noise. */
+  excite(v) {
+    const len = Math.max(2, Math.min(KS_LEN - 1, Math.round(this.sr / (440 * Math.pow(2, (v.note - 69) / 12)))));
+    v.ksLen = len;
+    v.ksIdx = 0;
+    let lp = 0;
+    const bright = 0.3 + 0.7 * Math.min(1, this.P.cutoff / 8000);
+    for (let i = 0; i < len; i++) {
+      lp += (this.rand() - lp) * bright;
+      v.ks[i] = lp;
+    }
+    v.ksLast = 0;
+  }
+
+  /**
+   * Legato: retune the voice playing `from` to a new note without retriggering it.
+   * A voice in its release tail is brought back (attack resumes from its current level).
+   * If the voice is gone, start a fresh note instead.
+   */
+  legato(m, offset) {
+    let v = null;
+    for (const x of this.voices) if (x.active && x.id === m.from) { v = x; break; }
+    if (!v) { this.noteOn({ id: m.id, n: m.n, v: m.v, g: -1 }, offset); return; }
+    v.id = m.id;
+    v.note = m.n;
+    v.tpitch = m.n;
+    v.vel = m.v;
+    v.age = ++this.ageCounter;
+    v.cG = m.gt > 0 ? coef(m.gt, this.sr) : 1;
+    v.offWait = -1;
+    // Re-strike: envelope attacks again from its current level, so there is no click or gap
+    if (m.rt || v.stage === 3) { v.stage = 1; v.fstage = 1; }
+    if (this.P.wave === 7) {
+      // Plucked strings can't slide: re-pluck at the new pitch
+      v.pitch = m.n;
+      v.freq = 440 * Math.pow(2, (m.n - 69) / 12);
+      this.excite(v);
     }
   }
 
@@ -410,7 +443,6 @@ class LowChordProcessor extends AudioWorkletProcessor {
     const cD = this.cD;
     const cR = this.cR;
     const cFD = this.cFD;
-    const cG = this.cGlide;
     const detune = P.detune;
     const subLvl = P.sub;
     const pw = P.pw;
@@ -438,7 +470,12 @@ class LowChordProcessor extends AudioWorkletProcessor {
         // Filter envelope (attack ~3ms, then decay to 0)
         if (v.fstage === 1) { v.fenv += 0.015; if (v.fenv >= 1) { v.fenv = 1; v.fstage = 2; } }
         else v.fenv -= v.fenv * cFD;
-        v.freq += (v.target - v.freq) * cG;
+        if (v.pitch !== v.tpitch) {
+          // Glide in pitch space (semitones) so slides sound even in every register
+          const d = v.tpitch - v.pitch;
+          v.pitch = Math.abs(d) < 0.0005 ? v.tpitch : v.pitch + d * v.cG;
+          v.freq = 440 * Math.pow(2, (v.pitch - 69) / 12);
+        }
         const f = v.freq * pitchMod;
         const dt = f / sr;
         let s = 0;
@@ -493,7 +530,7 @@ class LowChordProcessor extends AudioWorkletProcessor {
               if (ip < this.sampleLen - 1) {
                 const fr = p - ip;
                 s = this.sample[ip] + (this.sample[ip + 1] - this.sample[ip]) * fr;
-                v.spos += Math.pow(2, (v.note - 60) / 12) * this.sampleRateRatio * (f / v.target);
+                v.spos += (f / 261.6256) * this.sampleRateRatio;
               } else { v.stage = 3; v.env *= 0.9; }
             }
             break;
