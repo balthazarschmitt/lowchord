@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>LowChord</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="description" content="Pocket chord synthesizer: seven chord pads and a joystick, in your browser.">
+  <meta name="theme-color" content="#0b0d10">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="LowChord">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="stylesheet" href="style.css">
+  <link rel="modulepreload" href="src/main.js">
+</head>
+<body>
+  <main id="app">
+    <section id="display">
+      <canvas id="screen" aria-label="Display"></canvas>
+    </section>
+
+    <nav id="bar" aria-label="Menus">
+      <button type="button" data-panel="key" data-title="Key & chords">KEY</button>
+      <button type="button" data-panel="sound" data-title="Sound">SOUND</button>
+      <button type="button" data-panel="fx" data-title="Effects">FX</button>
+      <button type="button" data-panel="mode" data-title="Play mode">MODE</button>
+      <button type="button" data-panel="beat" data-title="Beat">BEAT</button>
+      <button type="button" data-panel="loop" data-title="Looper">LOOP</button>
+      <button type="button" data-panel="mic" data-title="Mic: sampler & vocoder">MIC</button>
+      <button type="button" data-panel="midi" data-title="MIDI">MIDI</button>
+      <button type="button" data-panel="settings" data-title="Settings" aria-label="Settings">⚙</button>
+    </nav>
+
+    <div id="strip" aria-label="Strum strip"><span>strum</span></div>
+
+    <section id="left">
+      <div id="joy" data-dir="c" aria-label="Joystick"><div id="knob"></div></div>
+      <div id="transport">
+        <button type="button" id="play" aria-label="Play or stop">▶</button>
+        <button type="button" id="rec" aria-label="Record loop">●</button>
+      </div>
+    </section>
+
+    <section id="pads">
+      <button type="button" class="pad" data-deg="0"><b>I</b><small></small></button>
+      <button type="button" class="pad" data-deg="1"><b>ii</b><small></small></button>
+      <button type="button" class="pad" data-deg="2"><b>iii</b><small></small></button>
+      <button type="button" class="pad" data-deg="3"><b>IV</b><small></small></button>
+      <button type="button" class="pad" data-deg="4"><b>V</b><small></small></button>
+      <button type="button" class="pad" data-deg="5"><b>vi</b><small></small></button>
+      <button type="button" class="pad" data-deg="6"><b>vii°</b><small></small></button>
+      <button type="button" class="pad util" id="hold"><b>HOLD</b><small>latch</small></button>
+    </section>
+
+    <section id="sheet" aria-label="Settings panel">
+      <header>
+        <h2 id="sheet-title"></h2>
+        <button type="button" id="sheet-close" aria-label="Close">✕</button>
+      </header>
+      <div id="sheet-body"></div>
+    </section>
+  </main>
+
+  <div id="splash">
+    <h1>Low<span>Chord</span></h1>
+    <p>Seven chords. One joystick.</p>
+    <button type="button" id="start">Tap to start</button>
+    <p id="splash-err"></p>
+    <p class="hint">Add to Home Screen for full-screen play. On iPhone, the silent switch won’t mute it.</p>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

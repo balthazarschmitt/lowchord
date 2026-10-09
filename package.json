@@ -1,0 +1,12 @@
+{
+  "name": "lowchord",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pocket chord synth web app",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "serve": "http-server -c-1 -p 8080 .",
+    "smoke": "node tests/smoke.mjs"
+  }
+}
