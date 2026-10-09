@@ -193,32 +193,44 @@ for (const [label, device] of [['iphone', devices['iPhone 13']], ['pixel', devic
   check(load < 0.25, 'worst-case patch uses < 25% of real time on desktop CPU');
 }
 
-// Glide: one sine voice slides C4 → C5 over 0.2 s via a legato message; measure pitch over time.
+// Glide: render single sine voices and measure pitch over time from zero crossings.
 {
   const page = await (await browser.newContext()).newPage();
   await page.goto(url);
-  const f = await page.evaluate(async () => {
+  const r = await page.evaluate(async () => {
     const sr = 48000;
-    const ctx = new OfflineAudioContext(1, sr * 1.2, sr);
-    await ctx.audioWorklet.addModule('src/worklet/synth.js');
-    const node = new AudioWorkletNode(ctx, 'lowchord', { outputChannelCount: [2] });
-    node.connect(ctx.destination);
-    node.port.postMessage({ t: 'ps', p: { wave: 0, revMix: 0, delayMix: 0, chorus: 0, cutoff: 18000, attack: 0.001, sustain: 1 } });
-    node.port.postMessage({ t: 'on', id: 1, n: 60, v: 1, w: 0, g: -1 });
-    node.port.postMessage({ t: 'leg', from: 1, id: 2, n: 72, v: 1, gt: 0.2, rt: 0, w: 0.4 });
-    await new Promise((r) => setTimeout(r, 50));
-    const d = (await ctx.startRendering()).getChannelData(0);
-    // Frequency from zero crossings in 40 ms windows
-    const freqAt = (t) => {
-      const a = Math.round(t * sr), n = Math.round(0.04 * sr);
-      let z = 0;
-      for (let i = a + 1; i < a + n; i++) if (d[i - 1] <= 0 && d[i] > 0) z++;
-      return z / 0.04;
-    };
-    return { before: freqAt(0.3), mid: freqAt(0.44), after: freqAt(0.9) };
+    async function render(msgs, times) {
+      const ctx = new OfflineAudioContext(1, sr * 1.2, sr);
+      await ctx.audioWorklet.addModule('src/worklet/synth.js');
+      const node = new AudioWorkletNode(ctx, 'lowchord', { outputChannelCount: [2] });
+      node.connect(ctx.destination);
+      node.port.postMessage({ t: 'ps', p: { wave: 0, revMix: 0, delayMix: 0, chorus: 0, cutoff: 18000, attack: 0.001, sustain: 1 } });
+      for (const m of msgs) node.port.postMessage(m);
+      await new Promise((r) => setTimeout(r, 50));
+      const d = (await ctx.startRendering()).getChannelData(0);
+      return times.map((t) => {
+        const a = Math.round(t * sr), n = Math.round(0.03 * sr);
+        let z = 0;
+        for (let i = a + 1; i < a + n; i++) if (d[i - 1] <= 0 && d[i] > 0) z++;
+        return Math.round(z / 0.03);
+      });
+    }
+    // Held voice slides C4 → C5 over 0.4 s
+    const held = await render([
+      { t: 'on', id: 1, n: 60, v: 1, w: 0, g: -1 },
+      { t: 'leg', from: 1, fn: 60, id: 2, n: 72, v: 1, gt: 0.4, rt: 0, w: 0.3 },
+    ], [0.2, 0.485, 1.0]);
+    // Voice already gone (chord played after a pause): new note glides in from C4
+    const fresh = await render([
+      { t: 'leg', from: 999, fn: 60, id: 3, n: 72, v: 1, gt: 0.4, rt: 0, w: 0.3 },
+    ], [0.485, 1.0]);
+    return { held, fresh };
   });
-  console.log(`glide: ${f.before} Hz → ${f.mid} Hz (mid-slide) → ${f.after} Hz`);
-  check(Math.abs(f.before - 262) < 30 && Math.abs(f.after - 523) < 30 && f.mid > 300 && f.mid < 500, 'legato voice glides smoothly between pitches');
+  console.log(`glide held: ${r.held.join(' → ')} Hz; fresh: ${r.fresh.join(' → ')} Hz`);
+  // Halfway through a constant-time octave glide the pitch is half an octave up (~370 Hz)
+  const near = (a, b, tol) => Math.abs(a - b) < tol;
+  check(near(r.held[0], 262, 40) && near(r.held[1], 370, 45) && near(r.held[2], 523, 40), 'held voice glides evenly over the set time');
+  check(near(r.fresh[0], 370, 45) && near(r.fresh[1], 523, 40), 'chord after a pause glides in from the previous pitch');
 }
 
 await browser.close();

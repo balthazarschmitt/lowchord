@@ -11,8 +11,8 @@ export class Out {
     this.onNote = null; // UI hook (note, on)
   }
 
-  noteOn(note, vel = 0.8, { when = 0, glide = -1, src = 'live', ch } = {}) {
-    const id = this.engine.noteOn(note, vel, when, glide, src);
+  noteOn(note, vel = 0.8, { when = 0, glide = -1, glideTime = 0, src = 'live', ch } = {}) {
+    const id = this.engine.noteOn(note, vel, when, glide, src, glideTime);
     const h = { id, note, vel, src, ch: ch ?? this.midi.channel, rec: null, offAt: Infinity };
     this.midi.noteOn(note, vel, when, h.ch);
     if (src === 'live' && this.recorder) this.recorder.recNoteOn(h, when || this.engine.now);
@@ -24,7 +24,7 @@ export class Out {
    * note-off to the synth; MIDI and the looper see a normal off/on pair.
    */
   legato(old, note, vel, glideTime, restrike = true) {
-    const id = this.engine.legato(old.id, note, vel, glideTime, restrike, old.src);
+    const id = this.engine.legato(old.id, old.note, note, vel, glideTime, restrike, old.src);
     const h = { id, note, vel, src: old.src, ch: old.ch, rec: null, offAt: Infinity };
     old.off = true;
     this.midi.noteOff(old.note, 0, old.ch);

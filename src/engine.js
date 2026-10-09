@@ -72,16 +72,16 @@ export class Engine {
   }
 
   /** Start a note. Returns an id for noteOff. `when` = 0 means now. */
-  noteOn(note, vel = 0.8, when = 0, glideFrom = -1, src = 'live') {
+  noteOn(note, vel = 0.8, when = 0, glideFrom = -1, src = 'live', glideTime = 0) {
     const id = this.nextId++;
-    this.post({ t: 'on', id, n: note, v: vel, w: when, g: glideFrom == null ? -1 : glideFrom, src });
+    this.post({ t: 'on', id, n: note, v: vel, w: when, g: glideFrom == null ? -1 : glideFrom, gt: glideTime, src });
     return id;
   }
 
   /** Glide the voice playing `fromId` to a new note (no retrigger). Returns the new id. */
-  legato(fromId, note, vel, glideTime, restrike = true, src = 'live') {
+  legato(fromId, fromNote, note, vel, glideTime, restrike = true, src = 'live') {
     const id = this.nextId++;
-    this.post({ t: 'leg', from: fromId, id, n: note, v: vel, gt: glideTime, rt: restrike ? 1 : 0, w: 0, src });
+    this.post({ t: 'leg', from: fromId, fn: fromNote, id, n: note, v: vel, gt: glideTime, rt: restrike ? 1 : 0, w: 0, src });
     return id;
   }
 

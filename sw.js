@@ -1,5 +1,5 @@
 // Offline cache. Bump VERSION whenever files change so phones pick up the update.
-const VERSION = 'lowchord-0.2.0';
+const VERSION = 'lowchord-0.2.1';
 const FILES = [
   './', 'index.html', 'style.css', 'manifest.webmanifest',
   'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',

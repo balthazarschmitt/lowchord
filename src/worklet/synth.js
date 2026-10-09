@@ -57,7 +57,7 @@ class Voice {
     this.freq = 261.6;
     this.pitch = 60; // current pitch in semitones (MIDI), glides toward tpitch
     this.tpitch = 60;
-    this.cG = 1; // glide coefficient for this voice
+    this.gRate = Infinity; // glide speed in semitones per sample (Infinity = jump)
     this.vel = 1;
     this.age = 0;
     this.stage = 0; // 0 off, 1 attack, 2 decay/sustain, 3 release
@@ -139,7 +139,7 @@ class LowChordProcessor extends AudioWorkletProcessor {
       delayTime: 0.375, delayFb: 0.35, delayMix: 0, revMix: 0.15, revSize: 0.6,
       bass: 0, drive: 0, vocoder: 0, vocMix: 1, micMon: 0, pluckDamp: 0.5,
     };
-    this.cA = this.cD = this.cR = this.cFD = this.cGlide = 0;
+    this.cA = this.cD = this.cR = this.cFD = 0;
     this.updateCoefs();
 
     // Mix buses
@@ -220,7 +220,6 @@ class LowChordProcessor extends AudioWorkletProcessor {
     this.cD = coef(P.decay, sr);
     this.cR = coef(P.release, sr);
     this.cFD = coef(P.fdecay, sr);
-    this.cGlide = P.glide > 0 ? coef(P.glide, sr) : 1;
   }
 
   updateShelf() {
@@ -276,7 +275,7 @@ class LowChordProcessor extends AudioWorkletProcessor {
   }
 
   paramChanged(k) {
-    if (k === 'attack' || k === 'decay' || k === 'release' || k === 'fdecay' || k === 'glide') this.updateCoefs();
+    if (k === 'attack' || k === 'decay' || k === 'release' || k === 'fdecay') this.updateCoefs();
     else if (k === 'bass') this.updateShelf();
   }
 
@@ -334,8 +333,10 @@ class LowChordProcessor extends AudioWorkletProcessor {
     v.vel = m.v;
     v.age = ++this.ageCounter;
     v.tpitch = m.n;
-    v.pitch = m.g >= 0 && P.glide > 0 ? m.g : m.n;
-    v.cG = this.cGlide;
+    // Glide in from `g` over `gt` seconds (explicit, e.g. chord glide) or the preset's note glide
+    const gt = m.gt > 0 ? m.gt : P.glide;
+    v.pitch = m.g >= 0 && gt > 0 ? m.g : m.n;
+    this.setGlide(v, gt);
     v.freq = 440 * Math.pow(2, (v.pitch - 69) / 12);
     v.stage = 1;
     if (!wasActive) v.env = 0;
@@ -374,13 +375,13 @@ class LowChordProcessor extends AudioWorkletProcessor {
   legato(m, offset) {
     let v = null;
     for (const x of this.voices) if (x.active && x.id === m.from) { v = x; break; }
-    if (!v) { this.noteOn({ id: m.id, n: m.n, v: m.v, g: -1 }, offset); return; }
+    if (!v) { this.noteOn({ id: m.id, n: m.n, v: m.v, g: m.fn ?? -1, gt: m.gt }, offset); return; }
     v.id = m.id;
     v.note = m.n;
     v.tpitch = m.n;
     v.vel = m.v;
     v.age = ++this.ageCounter;
-    v.cG = m.gt > 0 ? coef(m.gt, this.sr) : 1;
+    this.setGlide(v, m.gt);
     v.offWait = -1;
     // Re-strike: envelope attacks again from its current level, so there is no click or gap
     if (m.rt || v.stage === 3) { v.stage = 1; v.fstage = 1; }
@@ -390,6 +391,12 @@ class LowChordProcessor extends AudioWorkletProcessor {
       v.freq = 440 * Math.pow(2, (m.n - 69) / 12);
       this.excite(v);
     }
+  }
+
+  /** Constant-time portamento: reach tpitch in exactly `sec` seconds, at an even speed. */
+  setGlide(v, sec) {
+    const dist = Math.abs(v.tpitch - v.pitch);
+    v.gRate = sec > 0 && dist > 0 ? dist / (sec * this.sr) : Infinity;
   }
 
   noteOff(id, offset) {
@@ -473,7 +480,7 @@ class LowChordProcessor extends AudioWorkletProcessor {
         if (v.pitch !== v.tpitch) {
           // Glide in pitch space (semitones) so slides sound even in every register
           const d = v.tpitch - v.pitch;
-          v.pitch = Math.abs(d) < 0.0005 ? v.tpitch : v.pitch + d * v.cG;
+          v.pitch = Math.abs(d) <= v.gRate ? v.tpitch : v.pitch + (d > 0 ? v.gRate : -v.gRate);
           v.freq = 440 * Math.pow(2, (v.pitch - 69) / 12);
         }
         const f = v.freq * pitchMod;

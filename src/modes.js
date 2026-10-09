@@ -156,6 +156,7 @@ export class Performer {
     const chord = this.chordFor(deg);
     const notes = voiceChord(chord, S, this.prevVoicing);
     const glide = glideSources(notes, this.prevVoicing);
+    const from = this.prevVoicing;
     this.active = { deg, dir: this.joy, chord, notes };
     this.last = this.active;
     this.prevVoicing = notes;
@@ -167,7 +168,7 @@ export class Performer {
       this.stopHandles();
       this.repeatStart(notes);
     } else if (m !== 'strum' && S.chordGlide > 0) {
-      this.legatoTo(notes);
+      this.legatoTo(notes, from);
     } else {
       this.stopHandles();
       const now = this.engine.now;
@@ -191,17 +192,24 @@ export class Performer {
    * Move the sounding chord to `notes` by sliding each voice to its nearest new note
    * (no retrigger), like the HiChord. Works from a held chord or one still ringing out.
    */
-  legatoTo(notes) {
+  legatoTo(notes, from) {
     const S = this.S;
     let prev = this.handles;
     if (!prev.length && this.tail && this.engine.now - this.tail.t < S.sound.release + 0.05) prev = this.tail.handles;
     prev = prev.slice().sort((a, b) => a.note - b.note);
     const pairs = pairVoices(notes, prev.map((h) => h.note));
+    // Notes with no sounding voice still slide in from the last chord's pitches,
+    // even after a pause (portamento always on, like a mono synth's "always" mode).
+    const fromPairs = from && from.length ? pairVoices(notes, from) : null;
+    const fromNearest = glideSources(notes, from);
     const used = new Set();
     const vel = 0.8;
     const next = notes.map((n, i) => {
       const j = pairs[i];
-      if (j < 0) return this.out.noteOn(n, vel);
+      if (j < 0) {
+        const src = fromPairs && fromPairs[i] >= 0 ? from[fromPairs[i]] : fromNearest[i];
+        return this.out.noteOn(n, vel, { glide: src ?? -1, glideTime: S.chordGlide });
+      }
       used.add(j);
       return this.out.legato(prev[j], n, vel, S.chordGlide, S.restrike);
     });

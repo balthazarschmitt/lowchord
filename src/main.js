@@ -14,11 +14,11 @@ import { Display } from './ui/display.js';
 import { buildPanel } from './ui/menus.js';
 import * as store from './store.js';
 
-const VERSION = '0.2.0';
+const VERSION = '0.2.1';
 
 const DEFAULTS = {
   key: 0, scale: 0, octave: 0, joyMode: 'default', voicing: 'lead', inversion: 0, bass: 'off',
-  mode: 'play', bpm: 100, swing: 0, latch: false, chordGlide: 0.12, restrike: true,
+  mode: 'play', bpm: 100, swing: 0, latch: false, chordGlide: 0.18, restrike: false,
   arpPattern: 'up', arpRate: '1/16', arpOct: 1, arpGate: 0.7, arpLatch: false,
   repeatRate: '1/8', strumSpeed: 0.03, seqRate: '1/4',
   beatOn: false, beatPattern: 0, drumKit: 0, drumVol: 0.8,
@@ -28,6 +28,9 @@ const DEFAULTS = {
   vocoder: false, vocMix: 1, micMon: 0, userPresets: [],
 };
 
+// Bump when a default changes in a way saved settings should pick up.
+const SETTINGS_VERSION = 3;
+
 const DELAY_SYNC = { '1/2': 2, '3/8': 1.5, '1/4': 1, '3/16': 0.75, '1/8': 0.5, '1/8T': 1 / 3, '1/16': 0.25 };
 const RATES = ['1/4', '1/8', '1/8T', '1/16', '1/16T', '1/32'].map((r) => [r, r]);
 
@@ -36,6 +39,12 @@ function loadSettings() {
   const S = { ...structuredClone(DEFAULTS), ...saved };
   S.sound = { ...DEFAULT_SOUND, ...(saved.sound || DEFAULTS.sound) };
   S.fx = { ...DEFAULT_FX, ...(saved.fx || {}) };
+  if ((saved.v || 0) < 3) {
+    // v3: glide is constant-time and pure legato by default
+    S.chordGlide = DEFAULTS.chordGlide;
+    S.restrike = DEFAULTS.restrike;
+  }
+  S.v = SETTINGS_VERSION;
   if (S.mode === 'hero' || S.mode === 'ear') S.mode = 'play';
   S.beatOn = false;
   return S;
@@ -232,7 +241,7 @@ const PANELS = {
     { type: 'button', label: 'Save as user preset', action: saveUserPreset },
     { type: 'range', key: 'chordGlide', label: 'Chord glide', min: 0, max: 0.6, fmt: (v) => (v < 0.005 ? 'Off' : sec(v)) },
     { type: 'toggle', key: 'restrike', label: 'Re-strike', when: () => S.chordGlide > 0.005 },
-    { type: 'note', label: 'Voices slide into the next chord. Re-strike on: each change is articulated (best for bells, plucks, keys). Off: pure legato (best for pads and leads).' },
+    { type: 'note', label: 'Every chord slides from the last one, even after a pause. Re-strike adds a fresh attack on each change (good for bells, plucks, keys).' },
     { type: 'select', key: 'sound.wave', label: 'Wave', options: WAVES.map((w, i) => [i, w]) },
     { type: 'range', key: 'sound.detune', label: 'Detune / FM', min: 0, max: 1, fmt: pct },
     { type: 'range', key: 'sound.sub', label: 'Sub osc', min: 0, max: 1, fmt: pct },
